@@ -85,9 +85,9 @@ func main() {
 		vertify, actualMAC := verifyHMAC(body, keyText, sig)
 		w.Header().Set("X-GitHub-Delivery", delevery)
 		if vertify {
-			log.Println(exec_shell("./action.sh"))
 			w.WriteHeader(200)
 			w.Write([]byte("success"))
+			log.Println(exec_shell("./action.sh"))
 		} else {
 			if debug {
 				log.Println("Error request: receive="+sig, "expect="+actualMAC)
