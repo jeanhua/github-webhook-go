@@ -17,10 +17,15 @@
 ## 📦 依赖文件结构
 
 ```bash
-your-repo/
-├── webhook-go       # 编译后的二进制文件或 main.go
-├── action.sh        # 接收到合法请求后要执行的脚本
-└── .secret          # 存储 GitHub Webhook 的 Secret 密钥（首次运行时会提示输入）
+github-webhook-go:.
+│  action.sh		# 要执行的脚本
+│  build_script.bat	# go构建脚本，用于自动构建linux程序
+│  main.go			# 主程序代码
+│  README.md
+│
+└─build				# 构建结果
+        action.sh
+        github-hook	# linux可执行程序
 ```
 
 ---
@@ -71,6 +76,8 @@ go run main.go -p 5599
 go build -o webhook-go main.go
 ./webhook-go -p 8080
 ```
+
+> 如果使用linux环境，可以在win下运行 `build_script.bat`自动构建
 
 #### 开启调试模式：
 
