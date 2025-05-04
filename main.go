@@ -62,6 +62,11 @@ func main() {
 		os.Exit(1)
 	}
 	http.HandleFunc("/hook", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			w.Write([]byte("<h1>这不是你该来的地方!</h1><script>setTimeout(() => {window.location.href = \"https://www.blog.jeanhua.cn/\";}, 5000);</script>"))
+			return
+		}
 		sigHeader := r.Header.Get("X-Hub-Signature-256")
 		if sigHeader == "" {
 			w.WriteHeader(http.StatusUnauthorized)
