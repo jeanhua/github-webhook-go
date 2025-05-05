@@ -92,7 +92,7 @@ func main() {
 		if vertify {
 			w.WriteHeader(200)
 			w.Write([]byte("success"))
-			log.Println(exec_shell("./action.sh"))
+			go exec_shell("./action.sh")
 		} else {
 			if debug {
 				log.Println("Error request: receive="+sig, "expect="+actualMAC)
@@ -120,7 +120,7 @@ func verifyHMAC(message []byte, secret, expectedMAC string) (bool, string) {
 	return hmac.Equal([]byte(actualMAC), []byte(expectedMAC)), actualMAC
 }
 
-func exec_shell(s string) (string, error) {
+func exec_shell(s string) {
 	cmd := exec.Command("/bin/bash", "-c", s)
 	var out bytes.Buffer
 	cmd.Stdout = &out
@@ -128,5 +128,6 @@ func exec_shell(s string) (string, error) {
 	if err != nil {
 		log.Println(err)
 	}
-	return out.String(), err
+	log.Println("exec: " + s)
+	log.Println("out: \n" + out.String())
 }
