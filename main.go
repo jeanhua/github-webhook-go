@@ -51,6 +51,7 @@ func main() {
 			ctx.Abort()
 			return
 		}
+		ctx.Next()
 	})
 
 	for _, s := range config.Service {
