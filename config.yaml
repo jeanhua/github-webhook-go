@@ -1,0 +1,14 @@
+port: 5599
+debug: false
+
+service:
+  - name: "blog"
+    path: "/hook/blog"
+    secret: "./secret/blog_secret.txt"
+    script: "./script/blog_script.sh"
+  #
+  # Uncomment the following lines to add more services
+  # - name: "blog"
+  #   path: "/hook/blog"
+  #   secret: "$file:./secret/blog_secret.txt"
+  #   script: "$file:./script/blog_script.py"

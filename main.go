@@ -1,133 +1,103 @@
 package main
 
 import (
-	"bytes"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
-	"os/exec"
-	"strconv"
 	"strings"
+
+	"github.com/jeanhua/github-webhook-go/lib"
+	"github.com/jeanhua/jokerhttp"
+	"github.com/jeanhua/jokerhttp/engine"
+	"gopkg.in/yaml.v3"
 )
 
 func main() {
-	var port int
-	debug := false
-	for idx, param := range os.Args {
-		if param == "-p" || param == "-port" {
-			if idx == len(os.Args)-1 {
-				fmt.Println("error port")
-				os.Exit(1)
-			}
-			var err error
-			port, err = strconv.Atoi(os.Args[idx+1])
-			if err != nil {
-				fmt.Println("error: ", err)
-				os.Exit(1)
-			}
-
-		}
-		if param == "debug=true" {
-			debug = true
-		}
-	}
-	_, err := os.Stat(".secret")
-	if os.IsNotExist(err) {
-		fmt.Println("you have not sava the secret key,enter please:")
-		var input string
-		fmt.Scanln(&input)
-		if len(input) < 10 {
-			fmt.Println("length < 10!")
-			os.Exit(1)
-		}
-		err := os.WriteFile(".secret", []byte(input), 0600)
-		if err != nil {
-			fmt.Println("error: ", err)
-			os.Exit(1)
-		}
-	}
-	key, err := os.ReadFile(".secret")
-	keyText := string(key)
-	keyText = strings.ReplaceAll(keyText, "\n", "")
-	if debug {
-		fmt.Println("use key: " + keyText)
-	}
+	var config Config
+	file, err := os.Open("config.yaml")
 	if err != nil {
 		fmt.Println("error: ", err)
 		os.Exit(1)
 	}
-	http.HandleFunc("/hook", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			w.Write([]byte("<h1>这不是你该来的地方!</h1><script>setTimeout(() => {window.location.href = \"https://www.blog.jeanhua.cn/\";}, 5000);</script>"))
-			return
-		}
-		sigHeader := r.Header.Get("X-Hub-Signature-256")
+	defer file.Close()
+	decoder := yaml.NewDecoder(file)
+	err = decoder.Decode(&config)
+	if err != nil {
+		fmt.Println("error: ", err)
+		os.Exit(1)
+	}
+	if config.Port <= 0 || config.Port >= 65535 {
+		fmt.Println("port error!")
+		os.Exit(1)
+	}
+
+	joker := jokerhttp.NewEngine()
+	joker.Init()
+	joker.SetPort(config.Port)
+	joker.Use(func(ctx *engine.JokerContex) {
+		sigHeader := ctx.Request.Header.Get("X-Hub-Signature-256")
 		if sigHeader == "" {
-			w.WriteHeader(http.StatusUnauthorized)
-			w.Write([]byte("Missing signature header"))
+			ctx.ResponseWriter.WriteHeader(401)
+			ctx.ResponseWriter.Write([]byte("Missing signature header"))
+			ctx.Abort()
 			return
 		}
 		const prefix = "sha256="
 		if !strings.HasPrefix(sigHeader, prefix) || len(sigHeader) <= len(prefix) {
-			w.WriteHeader(http.StatusUnauthorized)
-			w.Write([]byte("Invalid signature format"))
+			ctx.ResponseWriter.WriteHeader(401)
+			ctx.ResponseWriter.Write([]byte("Invalid signature format"))
+			ctx.Abort()
 			return
-		}
-		sig := sigHeader[len(prefix):]
-		delevery := r.Header.Get("X-GitHub-Delivery")
-		body, err := io.ReadAll(r.Body)
-		defer r.Body.Close()
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		vertify, actualMAC := verifyHMAC(body, keyText, sig)
-		w.Header().Set("X-GitHub-Delivery", delevery)
-		if vertify {
-			w.WriteHeader(200)
-			w.Write([]byte("success"))
-			go exec_shell("./action.sh")
-		} else {
-			if debug {
-				log.Println("Error request: receive="+sig, "expect="+actualMAC)
-				os.WriteFile("request.log", body, 0755)
-			}
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte("error key"))
 		}
 	})
-	if port != 0 {
-		http.ListenAndServe(":"+strconv.Itoa(port), nil)
-	} else {
-		http.ListenAndServe(":5599", nil)
+
+	for _, s := range config.Service {
+		name := s.Name
+		path := s.Path
+		secretpath := s.Secret
+		script := s.Script
+		if name == "" || path == "" || secretpath == "" || script == "" {
+			fmt.Println("name or path or secret or script is empty!")
+			os.Exit(1)
+		}
+		secret, err := os.ReadFile(secretpath)
+		if err != nil {
+			fmt.Println("error: ", err)
+			os.Exit(1)
+		}
+		joker.MapPost(path, func(request *http.Request, body []byte, params url.Values, setHeader func(key, value string)) (status int, response interface{}) {
+			sigHeader := request.Header.Get("X-Hub-Signature-256")
+			sig := sigHeader[len("sha256="):]
+			delevery := request.Header.Get("X-GitHub-Delivery")
+			setHeader("X-GitHub-Delivery", delevery)
+			vertify, actualMAC := lib.VerifyHMAC(body, string(secret), sig)
+			if vertify {
+				log.Println(strings.ReplaceAll(`[Hook]:`, "Hook", s.Name) + s.Path + " @" + delevery)
+				go lib.Exec_shell(script, config.Debug)
+				return 200, "success"
+			} else {
+				if config.Debug {
+					fmt.Println("Error request: receive="+sig, "expect="+actualMAC)
+					os.WriteFile("request.log", body, 0755)
+				}
+				return 400, "error key"
+			}
+		})
 	}
+	joker.Run()
 }
 
-func computeHMAC(message []byte, secret string) string {
-	h := hmac.New(sha256.New, []byte(secret))
-	h.Write(message)
-	return hex.EncodeToString(h.Sum(nil))
+type Config struct {
+	Port    int             `yaml:"port"`
+	Debug   bool            `yaml:"debug"`
+	Service []ServiceConfig `yaml:"service"`
 }
 
-func verifyHMAC(message []byte, secret, expectedMAC string) (bool, string) {
-	actualMAC := computeHMAC(message, secret)
-	return hmac.Equal([]byte(actualMAC), []byte(expectedMAC)), actualMAC
-}
-
-func exec_shell(s string) {
-	cmd := exec.Command("/bin/bash", "-c", s)
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	err := cmd.Run()
-	if err != nil {
-		log.Println(err)
-	}
-	log.Println("exec: " + s)
-	log.Println("out: \n" + out.String())
+type ServiceConfig struct {
+	Name   string `yaml:"name"`
+	Path   string `yaml:"path"`
+	Secret string `yaml:"secret"`
+	Script string `yaml:"script"`
 }
