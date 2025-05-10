@@ -38,8 +38,7 @@ func main() {
 	joker.SetPort(config.Port)
 	joker.Use(func(ctx *engine.JokerContex) {
 		if ctx.Request.Method != http.MethodPost {
-			ctx.ResponseWriter.WriteHeader(http.StatusTemporaryRedirect)
-			ctx.ResponseWriter.Header().Set("Location", "/")
+			http.Redirect(ctx.ResponseWriter, ctx.Request, "/", http.StatusTemporaryRedirect)
 			return
 		}
 		sigHeader := ctx.Request.Header.Get("X-Hub-Signature-256")
