@@ -2,7 +2,7 @@
 setlocal
 set GOOS=windows
 set GOARCH=amd64
-go build -o build/github-hook_windows.exe
+go build -o build/github-hook_amd64_windows.exe
 endlocal
 
 @echo off
