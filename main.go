@@ -37,18 +37,21 @@ func main() {
 	joker.Init()
 	joker.SetPort(config.Port)
 	joker.Use(func(ctx *engine.JokerContex) {
+		if ctx.Request.Method != http.MethodPost {
+			ctx.ResponseWriter.WriteHeader(http.StatusTemporaryRedirect)
+			ctx.ResponseWriter.Header().Set("Location", "/")
+			return
+		}
 		sigHeader := ctx.Request.Header.Get("X-Hub-Signature-256")
 		if sigHeader == "" {
 			ctx.ResponseWriter.WriteHeader(401)
 			ctx.ResponseWriter.Write([]byte("Missing signature header"))
-			ctx.Abort()
 			return
 		}
 		const prefix = "sha256="
 		if !strings.HasPrefix(sigHeader, prefix) || len(sigHeader) <= len(prefix) {
 			ctx.ResponseWriter.WriteHeader(401)
 			ctx.ResponseWriter.Write([]byte("Invalid signature format"))
-			ctx.Abort()
 			return
 		}
 		ctx.Next()
