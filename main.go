@@ -54,6 +54,17 @@ func main() {
 		ctx.Next()
 	})
 
+	logfile, err := os.OpenFile("log.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Println("error: ", err)
+		os.Exit(1)
+	}
+	// Set up logging to file
+	defer logfile.Close()
+	log.SetOutput(logfile)
+	log.SetFlags(log.LstdFlags)
+	log.Println("Server started on port", config.Port)
+
 	for _, s := range config.Service {
 		name := s.Name
 		path := s.Path
@@ -81,7 +92,6 @@ func main() {
 			} else {
 				if config.Debug {
 					fmt.Println("Error request: receive="+sig, "expect="+actualMAC)
-					os.WriteFile("request.log", body, 0755)
 				}
 				return 400, "error key"
 			}
