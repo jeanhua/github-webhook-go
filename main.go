@@ -81,12 +81,13 @@ func main() {
 			fmt.Println("error: ", err)
 			os.Exit(1)
 		}
+		secretStr := strings.ReplaceAll(string(secret), "\n", "")
 		joker.MapPost(path, func(request *http.Request, body []byte, params url.Values, setHeader func(key, value string)) (status int, response interface{}) {
 			sigHeader := request.Header.Get("X-Hub-Signature-256")
 			sig := sigHeader[len("sha256="):]
 			delevery := request.Header.Get("X-GitHub-Delivery")
 			setHeader("X-GitHub-Delivery", delevery)
-			vertify, actualMAC := lib.VerifyHMAC(body, string(secret), sig)
+			vertify, actualMAC := lib.VerifyHMAC(body, secretStr, sig)
 			if vertify {
 				log.Println(strings.ReplaceAll(`[Hook]:`, "Hook", s.Name) + s.Path + " @" + delevery)
 				go lib.Exec_shell(script, config.Debug)
